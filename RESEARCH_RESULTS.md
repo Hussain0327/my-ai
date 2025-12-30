@@ -130,7 +130,7 @@ Typical variance is **1.5-2.0 percentage points** — any single-run difference 
 
 ## Visualizations
 
-![Multi-seed Results](lora_multiseed_results.png)
+![Multi-seed Results](fig1_lora_rank_multiseed_results.png)
 
 ---
 
@@ -138,11 +138,10 @@ Typical variance is **1.5-2.0 percentage points** — any single-run difference 
 
 | File | Description |
 |------|-------------|
-| `lora_multiseed_experiment.ipynb` | Multi-seed experiment notebook |
-| `multiseed_individual_runs.json` | All 30 individual run results |
-| `multiseed_aggregated_results.json` | Aggregated statistics per config |
-| `lora_multiseed_results.png` | Statistical visualization |
-| `paper.tex` | LaTeX paper (needs updating with new results) |
+| `lora_rank_selection_study.tex` | LaTeX paper |
+| `lora_rank_selection_study.pdf` | Compiled paper |
+| `experiment_lora_rank_30runs.ipynb` | Multi-seed experiment notebook (30 runs) |
+| `fig1_lora_rank_multiseed_results.png` | Results visualization (Figure 1) |
 
 ---
 

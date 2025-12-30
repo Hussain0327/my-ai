@@ -1,9 +1,36 @@
+# Python
 venv/
 __pycache__/
 *.pyc
-.DS_Store
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Training outputs
 results_full_ft/
 results_lora_r*/
 logs_*/
-*.egg-info/
-.ipynb_checkpoints/
+
+# LaTeX artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Old/archive files (kept locally but not tracked)
+archive/
