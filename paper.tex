@@ -3,99 +3,97 @@
 % ============== PACKAGES ==============
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{hyperref}
-\usepackage{xcolor}
 \usepackage{geometry}
 \usepackage{float}
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{natbib}
-% Removed packages not in BasicTeX: algorithm, multirow, enumitem
-
 % Page geometry
 \geometry{margin=1in}
+
+% Graphics path (optional)
+\graphicspath{{./}{figures/}}
 
 % Hyperlink styling
 \hypersetup{
     colorlinks=true,
     linkcolor=blue,
-    filecolor=magenta,
-    urlcolor=cyan,
-    citecolor=blue,
+    urlcolor=blue,
+    citecolor=blue
 }
+
+% Table spacing
+\renewcommand{\arraystretch}{1.12}
 
 % ============== TITLE ==============
 \title{\textbf{Optimizing Financial Sentiment Analysis:\\A Systematic Study of LoRA Rank Selection}}
 
-\author{
-    ValtricAI Research\\
-    \texttt{research@valtric.ai}
-}
+\author{Raja Hussain$^{1,2}$\thanks{This work was conducted independently. It does not represent the views of New York University.}\\[0.5em]
+\small $^1$New York University, New York, NY, USA\\
+\small $^2$ValtricAI Research, New York, NY, USA\\
+\small \texttt{research@valtric.ai}}
 
 \date{December 2025}
 
 \begin{document}
-
 \maketitle
 
 % ============== ABSTRACT ==============
 \begin{abstract}
-We present a systematic investigation of Low-Rank Adaptation (LoRA) rank selection for financial sentiment analysis. Using DistilRoBERTa-base (82M parameters) on the Twitter Financial News Sentiment dataset, we evaluate six configurations: full fine-tuning and LoRA at ranks 4, 8, 16, 32, and 64. Our key finding is that \textbf{rank-32 achieves optimal accuracy (85.5\%)}, outperforming rank-64 (85.3\%) while using 25\% fewer trainable parameters. All LoRA configurations reduce peak GPU memory by 40-44\% compared to full fine-tuning (2.02 GB $\rightarrow$ 1.14-1.35 GB), enabling deployment on consumer hardware. These results challenge the assumption that higher ranks yield better performance and provide practical guidance for financial NLP practitioners seeking to balance accuracy and computational efficiency.
+We present a systematic investigation of Low-Rank Adaptation (LoRA) rank selection for financial sentiment analysis, validated across multiple random seeds ($n=5$ per configuration, 30 total runs). Using DistilRoBERTa-base (82M parameters) on the Twitter Financial News Sentiment dataset, we evaluate full fine-tuning and LoRA at ranks 4, 8, 16, 32, and 64. Our key finding is that \textbf{diminishing returns begin at rank 16}: while transitions from $r=4 \rightarrow 8 \rightarrow 16$ show statistically significant improvements ($p<0.01$), gains from $r=16 \rightarrow 32 \rightarrow 64$ are \textbf{not statistically significant} ($p>0.1$). Notably, the difference between $r=32$ (84.4\%) and $r=64$ (84.6\%) is indistinguishable from noise ($p=0.35$). All LoRA configurations retain 94.6--97.4\% of full fine-tuning accuracy while reducing trainable parameters by 97.8--99.2\%. These results provide evidence-based guidance for practitioners: \textbf{$r=16$ offers the best accuracy within the statistically significant improvement zone}, challenging the common practice of defaulting to higher ranks.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
 \subsection{Motivation}
-
 Financial sentiment analysis is critical for algorithmic trading, risk assessment, and market intelligence. However, deploying fine-tuned language models at scale presents challenges:
 
 \begin{enumerate}
     \item \textbf{Computational Cost}: Full fine-tuning of transformer models requires substantial GPU memory and training time.
     \item \textbf{Multi-Model Deployment}: Financial institutions often need multiple specialized models (earnings, news, social media).
-    \item \textbf{Latency Requirements}: Real-time trading systems demand efficient inference.
+    \item \textbf{Reproducibility}: Single-run evaluations can be misleading due to random variance.
 \end{enumerate}
 
-Low-Rank Adaptation (LoRA) \citep{hu2022lora} has emerged as the dominant parameter-efficient fine-tuning (PEFT) method, reducing trainable parameters by orders of magnitude while maintaining competitive performance. However, the relationship between LoRA rank and downstream task performance remains underexplored, particularly for specialized domains like finance.
+Low-Rank Adaptation (LoRA) \citep{hu2022lora} has become the dominant parameter-efficient fine-tuning (PEFT) method, reducing trainable parameters by orders of magnitude while maintaining competitive performance. However, the relationship between LoRA rank and downstream task performance remains underexplored, particularly regarding \textit{statistical significance} of observed differences.
 
 \subsection{Research Question}
-
-\textit{What is the optimal LoRA rank for financial sentiment classification? Does increasing rank monotonically improve accuracy, or is there a point of diminishing returns?}
+\textit{What is the optimal LoRA rank for financial sentiment classification, and are differences between rank configurations statistically significant or merely noise?}
 
 \subsection{Contributions}
-
-\begin{enumerate}    \item A systematic comparison of LoRA ranks (4, 8, 16, 32, 64) against full fine-tuning for financial sentiment analysis.
-    \item Empirical evidence that \textbf{rank-32 outperforms rank-64}, challenging the ``higher is better'' assumption.
-    \item Comprehensive analysis of accuracy-efficiency tradeoffs including GPU memory profiling.
-    \item Practical deployment recommendations for financial ML systems.
+\begin{enumerate}
+    \item A \textbf{multi-seed validated} comparison ($n=5$ per configuration) of LoRA ranks against full fine-tuning for financial sentiment analysis.
+    \item Evidence that \textbf{$r=32$ and $r=64$ are statistically indistinguishable} ($p=0.35$), contradicting single-run conclusions.
+    \item Identification of \textbf{$r=16$ as the inflection point} where statistically significant improvements cease.
+    \item Practical deployment recommendations grounded in statistical evidence rather than point estimates.
 \end{enumerate}
 
 \section{Related Work}
 \label{sec:related}
 
 \subsection{Parameter-Efficient Fine-Tuning}
+\citet{hu2022lora} introduced LoRA, arguing that weight updates during fine-tuning lie in a low-dimensional subspace. By injecting trainable low-rank decomposition matrices, LoRA reduces trainable parameters while preserving performance.
 
-\citet{hu2022lora} introduced LoRA, demonstrating that pre-trained models have low ``intrinsic rank''---weight updates during fine-tuning reside in a low-dimensional subspace. By injecting trainable rank decomposition matrices ($W = W_0 + BA$ where $B \in \mathbb{R}^{d \times r}$, $A \in \mathbb{R}^{r \times k}$), LoRA reduces trainable parameters by up to 10,000$\times$ while maintaining performance on GPT-3 175B.
+\citet{zhao2024loraland} evaluated LoRA at scale (310 models across 31 tasks), reporting large average gains over base models and strong practical deployment implications.
 
-\citet{zhao2024loraland} validated LoRA at scale, training 310 models across 31 tasks. Their study found that 4-bit LoRA fine-tuned models outperform base models by 34 points and GPT-4 by 10 points on average, with 25 adapters served on a single A100 GPU via LoRAX.
-
-\subsection{Distributed and Privacy-Preserving LoRA}
-
-\citet{gao2024dlora} proposed DLoRA for distributed fine-tuning, introducing the Kill and Revive (KR) algorithm to identify ``active'' vs ``idle'' parameter modules. Their approach reduces communication overhead by 80\% while maintaining accuracy, demonstrating that not all LoRA parameters contribute equally---a finding that motivates our rank selection study.
+\subsection{Distributed and Structured LoRA}
+\citet{gao2024dlora} proposed DLoRA for distributed PEFT. Their results motivate studying which LoRA capacity (rank) is actually useful for downstream tasks.
 
 \subsection{Financial Sentiment Analysis}
-
-FinBERT \citep{araci2019finbert} established transformer-based approaches for financial NLP, achieving 97\% accuracy on Financial PhraseBank (full agreement subset). Recent work explores efficiency-accuracy tradeoffs in this domain, though systematic LoRA rank studies remain limited.
+FinBERT \citep{araci2019finbert} established transformer-based approaches for financial NLP. Efficiency-accuracy tradeoffs are increasingly important, but statistically validated rank studies remain limited.
 
 \section{Methodology}
 \label{sec:method}
 
 \subsection{Dataset}
-
-We use the \textbf{Twitter Financial News Sentiment} dataset from HuggingFace (\texttt{zeroshot/twitter-financial-news-sentiment}), containing 9,543 samples with three sentiment labels.
+We use the \textbf{Twitter Financial News Sentiment} dataset from Hugging Face (\texttt{zeroshot/twitter-financial-news-sentiment}), containing 9,543 labeled samples with three sentiment labels.
 
 \begin{table}[H]
 \centering
@@ -115,12 +113,18 @@ Test & 1,909 \\
 \end{table}
 
 \subsection{Model}
+We use \textbf{DistilRoBERTa-base} (82M parameters), a distilled RoBERTa variant with 6 transformer layers and 768 hidden dimensions.
 
-We use \textbf{DistilRoBERTa-base} (82M parameters), a distilled version of RoBERTa-base with 6 transformer layers and 768 hidden dimensions. This model is ideal for benchmarking due to its moderate size and strong performance on NLP tasks.
+\subsection{Multi-Seed Experimental Design}
+To reduce variance and support statistical testing, we run each configuration with \textbf{five random seeds}: [42, 123, 456, 789, 1337]. This affects:
+\begin{itemize}
+    \item Weight initialization (classifier head and LoRA adapters)
+    \item Dropout masks during training
+    \item Data shuffling order
+\end{itemize}
+Total experiments: 6 configurations $\times$ 5 seeds = \textbf{30 runs}.
 
 \subsection{Experimental Configurations}
-
-We evaluate six configurations spanning full fine-tuning and five LoRA ranks:
 
 \begin{table}[H]
 \centering
@@ -141,9 +145,10 @@ We evaluate six configurations spanning full fine-tuning and five LoRA ranks:
 \end{table}
 
 \textbf{LoRA Configuration:}
-\begin{itemize}    \item Target modules: \texttt{query}, \texttt{value} (attention layers)
+\begin{itemize}
+    \item Target modules: \texttt{query}, \texttt{value} (attention layers)
     \item Dropout: 0.1
-    \item Alpha scaling: $\alpha = 2r$ (following common practice)
+    \item Alpha scaling: $\alpha = 2r$
     \item Bias: None
 \end{itemize}
 
@@ -159,171 +164,197 @@ We evaluate six configurations spanning full fine-tuning and five LoRA ranks:
 \midrule
 Batch Size & 32 \\
 Learning Rate (Full FT) & $2 \times 10^{-5}$ \\
-Learning Rate (LoRA) & $1 \times 10^{-4}$ (5$\times$ base) \\
+Learning Rate (LoRA) & $1 \times 10^{-4}$ \\
 Epochs & 3 \\
 Max Sequence Length & 128 \\
 Optimizer & AdamW \\
 Weight Decay & 0.01 \\
-Early Stopping Patience & 2 epochs \\
 Precision & FP16 (mixed) \\
-Hardware & NVIDIA GPU \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Evaluation Metrics}
-
-We report:
-\begin{itemize}    \item \textbf{Accuracy}: Overall classification accuracy
-    \item \textbf{F1 Score}: Weighted F1 across all classes
-    \item \textbf{Peak VRAM}: Maximum GPU memory allocated during training
-    \item \textbf{Training Time}: Wall-clock time for 3 epochs
-\end{itemize}
+\subsection{Statistical Analysis}
+We report mean $\pm$ standard deviation and 95\% confidence intervals (CI) using the t-distribution. For pairwise comparisons, we use \textbf{paired t-tests} (same seed list across configurations) with significance threshold $\alpha = 0.05$.
 
 \section{Results}
 \label{sec:results}
 
-\subsection{Performance Comparison}
-
-Table~\ref{tab:results} presents the complete results across all six configurations.
+\subsection{Multi-Seed Performance Summary}
+Table~\ref{tab:results} reports accuracy and weighted F1 across all six configurations.
 
 \begin{table}[H]
 \centering
-\caption{Complete Experimental Results}
+\caption{Multi-Seed Experimental Results ($n=5$ per configuration)}
 \label{tab:results}
-\begin{tabular}{lrrrrr}
+\begin{tabular}{lrccr}
 \toprule
-\textbf{Configuration} & \textbf{Params (\%)} & \textbf{Accuracy} & \textbf{F1 Score} & \textbf{Time (s)} & \textbf{VRAM (GB)} \\
+\textbf{Configuration} & \textbf{Trainable (\%)} & \textbf{Accuracy (mean$\pm$std)} & \textbf{95\% CI} & \textbf{F1 (mean$\pm$std)} \\
 \midrule
-Full Fine-Tuning & 100.00 & \textbf{87.53\%} & \textbf{87.63\%} & 31.1 & 2.02 \\
+Full Fine-Tuning & 100.00 & \textbf{86.85$\pm$0.70\%} & [85.98, 87.73] & 86.86$\pm$0.69\% \\
 \midrule
-LoRA $r=4$ & 0.81 & 83.33\% & 83.33\% & 27.9 & 1.35 \\
-LoRA $r=8$ & 0.90 & 83.93\% & 83.90\% & 27.5 & \textbf{1.14} \\
-LoRA $r=16$ & 1.08 & 84.52\% & 84.48\% & 27.6 & 1.15 \\
-LoRA $r=32$ & 1.44 & \underline{85.54\%} & \underline{85.50\%} & 27.7 & 1.15 \\
-LoRA $r=64$ & 2.16 & 85.28\% & 85.47\% & 27.8 & 1.17 \\
+LoRA $r=4$ & 0.81 & 82.20$\pm$0.83\% & [81.17, 83.23] & 82.12$\pm$0.89\% \\
+LoRA $r=8$ & 0.90 & 83.55$\pm$0.55\% & [82.87, 84.23] & 83.57$\pm$0.53\% \\
+LoRA $r=16$ & 1.08 & 84.08$\pm$0.61\% & [83.32, 84.83] & 84.11$\pm$0.58\% \\
+LoRA $r=32$ & 1.44 & 84.42$\pm$0.89\% & [83.31, 85.53] & 84.49$\pm$0.90\% \\
+LoRA $r=64$ & 2.16 & \underline{84.56$\pm$0.76\%} & [83.62, 85.50] & 84.65$\pm$0.73\% \\
 \bottomrule
 \end{tabular}
-\vspace{0.5em}
-\footnotesize{\textit{Note: Bold = best overall; Underline = best among LoRA configurations}}
+\vspace{0.4em}
+
+\footnotesize{\textit{Bold = best overall; Underline = best among LoRA configurations}}
 \end{table}
 
-\subsection{Key Finding: Rank-32 Outperforms Rank-64}
-
-Contrary to the intuition that higher ranks provide more capacity and thus better performance, \textbf{LoRA $r=32$ achieves 85.54\% accuracy, outperforming $r=64$ at 85.28\%} (a 0.26 percentage point improvement). This suggests:
-
-\begin{enumerate}    \item The intrinsic rank of the financial sentiment task is approximately 32.
-    \item Higher ranks may introduce overfitting or optimization difficulties.
-    \item Rank selection should be empirically validated rather than defaulting to higher values.
-\end{enumerate}
-
-\subsection{Efficiency Analysis}
-
-Table~\ref{tab:efficiency} shows the accuracy-efficiency tradeoffs relative to full fine-tuning.
+\subsection{Key Finding: Diminishing Returns at $r=16$}
+Table~\ref{tab:significance} shows paired t-tests for adjacent rank transitions.
 
 \begin{table}[H]
 \centering
-\caption{Efficiency Analysis (vs. Full Fine-Tuning Baseline)}
-\label{tab:efficiency}
-\begin{tabular}{lrrrr}
+\caption{Statistical Significance of Rank Transitions (Paired t-tests)}
+\label{tab:significance}
+\begin{tabular}{lcccl}
 \toprule
-\textbf{Config} & \textbf{Acc. Retention} & \textbf{Param Reduction} & \textbf{VRAM Savings} & \textbf{Time Savings} \\
+\textbf{Transition} & \textbf{$\Delta$ Accuracy} & \textbf{t-statistic} & \textbf{p-value} & \textbf{Significant?} \\
 \midrule
-LoRA $r=4$ & 95.2\% & 99.2\% & 33.2\% & 10.3\% \\
-LoRA $r=8$ & 95.9\% & 99.1\% & 43.6\% & 11.6\% \\
-LoRA $r=16$ & 96.6\% & 98.9\% & 43.1\% & 11.3\% \\
-LoRA $r=32$ & \textbf{97.7\%} & 98.6\% & 43.1\% & 10.9\% \\
-LoRA $r=64$ & 97.4\% & 97.8\% & 42.1\% & 10.6\% \\
+$r=4 \rightarrow r=8$ & +1.35 pp & 5.798 & 0.0044 & \textbf{Yes} ** \\
+$r=8 \rightarrow r=16$ & +0.52 pp & 8.209 & 0.0012 & \textbf{Yes} ** \\
+$r=16 \rightarrow r=32$ & +0.35 pp & 1.855 & 0.1372 & No \\
+$r=32 \rightarrow r=64$ & +0.14 pp & 1.065 & 0.3469 & No \\
+\bottomrule
+\end{tabular}
+\vspace{0.4em}
+
+\footnotesize{\textit{Significance: * $p<0.05$, ** $p<0.01$, *** $p<0.001$}}
+\end{table}
+
+\textbf{Interpretation:} Accuracy improvements are statistically significant only up to $r=16$. Beyond this point, gains are not distinguishable from random variance.
+
+\subsection{Full Fine-Tuning vs LoRA Comparisons}
+\begin{table}[H]
+\centering
+\caption{Full Fine-Tuning vs Each LoRA Configuration (Paired t-tests)}
+\label{tab:fullft_comparison}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Comparison} & \textbf{$\Delta$ Accuracy} & \textbf{t-statistic} & \textbf{p-value} & \textbf{Significant?} \\
+\midrule
+Full FT vs $r=4$ & +4.65 pp & 31.124 & $<$0.0001 & \textbf{Yes} *** \\
+Full FT vs $r=8$ & +3.30 pp & 18.187 & 0.0001 & \textbf{Yes} *** \\
+Full FT vs $r=16$ & +2.78 pp & 17.017 & 0.0001 & \textbf{Yes} *** \\
+Full FT vs $r=32$ & +2.43 pp & 11.234 & 0.0004 & \textbf{Yes} *** \\
+Full FT vs $r=64$ & +2.29 pp & 12.894 & 0.0002 & \textbf{Yes} *** \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Key observations:}
-\begin{itemize}    \item \textbf{VRAM Savings}: All LoRA configurations reduce peak memory by 33-44\%, with $r=8$ achieving the lowest usage (1.14 GB).
-    \item \textbf{Accuracy Retention}: $r=32$ retains 97.7\% of full fine-tuning accuracy---the best among all LoRA configurations.
-    \item \textbf{Parameter Efficiency}: $r=4$ achieves 102.9 accuracy points per percent of parameters trained, vs. 0.9 for full fine-tuning.
-\end{itemize}
+All LoRA configurations perform significantly worse than full fine-tuning ($p<0.001$), with gaps ranging from 2.29 pp ($r=64$) to 4.65 pp ($r=4$).
+
+\subsection{Run-to-Run Variance}
+\begin{table}[H]
+\centering
+\caption{Run-to-Run Variance Analysis}
+\label{tab:variance}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Configuration} & \textbf{Min} & \textbf{Max} & \textbf{Spread} & \textbf{Std Dev} \\
+\midrule
+Full Fine-Tuning & 85.96\% & 87.59\% & 1.62 pp & 0.70\% \\
+LoRA $r=4$ & 81.25\% & 83.34\% & 2.10 pp & 0.83\% \\
+LoRA $r=8$ & 82.77\% & 83.92\% & 1.15 pp & 0.55\% \\
+LoRA $r=16$ & 83.18\% & 84.70\% & 1.52 pp & 0.61\% \\
+LoRA $r=32$ & 83.18\% & 85.28\% & 2.10 pp & 0.89\% \\
+LoRA $r=64$ & 83.55\% & 85.28\% & 1.73 pp & 0.76\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Typical run-to-run variance is approximately 1.5--2.0 percentage points. Single-run differences smaller than this are unreliable without multi-seed validation.
 
 \subsection{Visualization}
-
-Figure~\ref{fig:results} presents a comprehensive visualization of the accuracy-efficiency tradeoffs.
-
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\textwidth]{output.png}
-    \caption{LoRA Rank Study Results. Top row: (a) Accuracy by configuration, (b) Accuracy vs. trainable parameters on log scale, (c) Peak VRAM usage. Bottom row: (d) Accuracy vs. LoRA rank showing the non-monotonic relationship, (e) Parameter efficiency score, (f) Efficiency frontier showing accuracy retention vs. parameter savings.}
+    \includegraphics[width=\textwidth]{new_output.png}
+    \caption{Multi-seed LoRA rank study results ($n=5$ seeds per configuration). Key finding: $r=32$ (84.4\%) vs $r=64$ (84.6\%) is not statistically significant ($p=0.35$).}
     \label{fig:results}
 \end{figure}
 
-The ``Accuracy vs LoRA Rank'' plot (Figure~\ref{fig:results}d) clearly shows accuracy increasing from $r=4$ (83.3\%) through $r=32$ (85.5\%), then \textit{decreasing} at $r=64$ (85.3\%). This non-monotonic relationship is the central finding of our study.
+\subsection{Efficiency Analysis}
+\begin{table}[H]
+\centering
+\caption{Efficiency Analysis with Statistical Validation}
+\label{tab:efficiency}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Config} & \textbf{Acc. Retention} & \textbf{Param Reduction} & \textbf{Gain vs Previous} \\
+\midrule
+LoRA $r=4$ & 94.6\% & 99.2\% & --- \\
+LoRA $r=8$ & 96.2\% & 99.1\% & Significant ($p=0.004$) \\
+LoRA $r=16$ & \textbf{96.8\%} & 98.9\% & Significant ($p=0.001$) \\
+LoRA $r=32$ & 97.2\% & 98.6\% & Not significant ($p=0.14$) \\
+LoRA $r=64$ & 97.4\% & 97.8\% & Not significant ($p=0.35$) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Interpretation: The Intrinsic Rank Hypothesis}
+\subsection{Why Multi-Seed Validation Changes Conclusions}
+Single-run results can flip the apparent ranking between configurations. Multi-seed validation shows that $r=32$ and $r=64$ are statistically indistinguishable ($p=0.35$), so claims that one is definitively better are not supported.
 
-Our results align with the intrinsic rank hypothesis of \citet{hu2022lora}: the weight updates needed for financial sentiment adaptation reside in a low-dimensional subspace of approximately rank 32. Beyond this point, additional capacity does not improve---and may slightly harm---performance.
+\subsection{Interpretation: Intrinsic Rank Hypothesis}
+Results are consistent with the intrinsic-rank hypothesis in LoRA \citep{hu2022lora}: the task appears to have an effective adaptation rank around 16, beyond which additional capacity yields no statistically significant improvement.
 
-This finding is consistent with \citet{gao2024dlora}'s observation that not all LoRA parameters are equally important. The KR algorithm's success in pruning ``idle'' modules suggests that financial sentiment, as a relatively constrained classification task, does not require the full capacity of higher-rank adapters.
-
-\subsection{Why Does $r=64$ Underperform $r=32$?}
-
-We hypothesize several factors:
-
-\begin{enumerate}    \item \textbf{Overfitting}: Higher rank provides more parameters to memorize training data.
-    \item \textbf{Optimization Landscape}: More parameters create a more complex loss surface, potentially leading to suboptimal local minima.
-    \item \textbf{Alpha Scaling}: With $\alpha = 2r$, higher ranks have larger effective learning rates, which may cause training instability.
+\subsection{Why Do Gains Plateau at $r=16$?}
+We hypothesize:
+\begin{enumerate}
+    \item \textbf{Task Complexity}: 3-class sentiment is a constrained downstream task.
+    \item \textbf{Dataset Size}: With roughly 7.6K training samples, higher ranks may not learn stable extra structure.
+    \item \textbf{Optimization Noise}: Additional degrees of freedom can amplify variance and reduce marginal gains.
 \end{enumerate}
 
-Future work should investigate these hypotheses through ablation studies on alpha scaling and regularization.
-
 \subsection{Practical Deployment Recommendations}
-
-Based on our findings, we provide the following recommendations:
-
 \begin{table}[H]
 \centering
-\caption{Deployment Recommendations}
+\caption{Evidence-Based Deployment Recommendations}
 \label{tab:recommendations}
-\begin{tabular}{ll}
+\begin{tabular}{lll}
 \toprule
-\textbf{Use Case} & \textbf{Recommendation} \\
+\textbf{Use Case} & \textbf{Recommendation} & \textbf{Rationale} \\
 \midrule
-Maximum accuracy required & Full Fine-Tuning \\
-Production deployment (balanced) & LoRA $r=32$ \\
-Multi-adapter serving & LoRA $r=16$ or $r=32$ \\
-Consumer hardware ($<$ 4GB VRAM) & LoRA $r=8$ \\
-Rapid experimentation & LoRA $r=4$ \\
+Maximum accuracy & Full Fine-Tuning & 2.3--4.6 pp better ($p<0.001$) \\
+Production deployment & LoRA $r=16$ & Best within significant-gain zone \\
+If rank cost is irrelevant & LoRA $r=32$ or $r=64$ & Marginal, not significant \\
+Memory-constrained & LoRA $r=8$ & Strong retention with fewer params \\
+Rapid prototyping & LoRA $r=4$ & Fastest experiments \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Limitations}
-
-\begin{enumerate}    \item \textbf{Single Dataset}: Results may vary across financial corpora (e.g., Financial PhraseBank, SEC filings).
-    \item \textbf{Single Model}: Larger models (7B+) may exhibit different rank sensitivity.
-    \item \textbf{Fixed Alpha Scaling}: We used $\alpha = 2r$; other scaling strategies may alter the rank-accuracy relationship.
-    \item \textbf{Hardware}: VRAM differences may be more pronounced on consumer GPUs.
+\begin{enumerate}
+    \item \textbf{Single Dataset}: Rank sensitivity may vary across financial corpora.
+    \item \textbf{Single Model}: Larger models may exhibit different rank dynamics.
+    \item \textbf{Fixed Alpha Scaling}: We used $\alpha = 2r$.
+    \item \textbf{Seed Count}: $n=5$ provides moderate power; $n=10+$ would strengthen conclusions.
 \end{enumerate}
 
 \section{Conclusion}
 \label{sec:conclusion}
-
-We present a systematic study of LoRA rank selection for financial sentiment analysis. Our key contributions are:
-
-\begin{enumerate}    \item \textbf{Optimal Rank Discovery}: LoRA $r=32$ achieves the best accuracy (85.54\%) among all LoRA configurations, outperforming $r=64$ by 0.26 percentage points.
-    \item \textbf{Non-Monotonic Relationship}: Accuracy does not monotonically increase with rank, challenging the ``higher is better'' assumption.
-    \item \textbf{Practical Efficiency}: All LoRA configurations reduce VRAM by 33-44\% while retaining 95-98\% of full fine-tuning accuracy.
+We present a multi-seed validated study of LoRA rank selection for financial sentiment analysis. Key findings:
+\begin{enumerate}
+    \item \textbf{Diminishing returns at $r=16$}: Significant gains occur only up to rank 16.
+    \item \textbf{$r=32$ vs $r=64$ is noise}: The 0.14 pp difference is not significant ($p=0.35$).
+    \item \textbf{Multi-seed validation is essential}: Single-run differences under 2 pp are unreliable.
+    \item \textbf{Practical recommendation}: LoRA $r=16$ is the best default for production efficiency.
 \end{enumerate}
 
-For financial NLP practitioners, we recommend \textbf{LoRA $r=32$} as the default configuration, offering the best balance of accuracy (97.7\% retention) and efficiency (98.6\% parameter reduction). This enables training on consumer GPUs and serving multiple specialized adapters on a single production GPU.
-
 \subsection{Future Work}
-
-\begin{enumerate}    \item \textbf{Automated Rank Selection}: Following \citet{sakana2025evolutionary}'s evolutionary optimization framework, future work could automatically discover optimal LoRA configurations.
-    \item \textbf{Cross-Domain Validation}: Extend to Financial PhraseBank, SEC filings, and earnings call transcripts.
-    \item \textbf{Larger Models}: Replicate on Mistral-7B, Llama-3-8B to test rank sensitivity at scale.
-    \item \textbf{Alpha Ablation}: Investigate the interaction between rank and alpha scaling.
+\begin{enumerate}
+    \item Increase seeds to $n=10+$ for stronger statistical power.
+    \item Validate across Financial PhraseBank, SEC filings, and earnings transcripts.
+    \item Test larger backbones (Mistral-7B, Llama-3-8B) for rank sensitivity.
+    \item Explore automated rank selection methods for PEFT.
 \end{enumerate}
 
 % ============== REFERENCES ==============
@@ -333,27 +364,22 @@ For financial NLP practitioners, we recommend \textbf{LoRA $r=32$} as the defaul
 
 \bibitem[Araci(2019)]{araci2019finbert}
 Dogu Araci.
-\newblock Finbert: Financial sentiment analysis with pre-trained language models.
+\newblock FinBERT: Financial sentiment analysis with pre-trained language models.
 \newblock \emph{arXiv preprint arXiv:1908.10063}, 2019.
 
 \bibitem[Gao and Zhang(2024)]{gao2024dlora}
-Chao Gao and Sai~Qian Zhang.
-\newblock Dlora: Distributed parameter-efficient fine-tuning solution for large language model.
+Chao Gao and Sai-Qian Zhang.
+\newblock DLoRA: Distributed parameter-efficient fine-tuning solution for large language model.
 \newblock In \emph{Findings of the Association for Computational Linguistics: EMNLP 2024}, 2024.
 
 \bibitem[Hu et~al.(2022)]{hu2022lora}
-Edward~J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu~Wang, and Weizhu Chen.
-\newblock Lora: Low-rank adaptation of large language models.
-\newblock In \emph{International Conference on Learning Representations}, 2022.
-
-\bibitem[Sakana~AI(2025)]{sakana2025evolutionary}
-Sakana~AI.
-\newblock Evolutionary optimization of model merging recipes.
-\newblock \emph{Nature Machine Intelligence}, 2025.
+Edward~J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen.
+\newblock LoRA: Low-rank adaptation of large language models.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2022.
 
 \bibitem[Zhao et~al.(2024)]{zhao2024loraland}
-Justin Zhao, Timothy Wang, et~al.
-\newblock Lora land: 310 fine-tuned llms that rival gpt-4.
+Justin Zhao, Timothy Wang, Wael Abid, Geoffrey Angus, Arnav Garg, Jeffery Kinnison, Alex Sherstinsky, Piero Molino, Travis Addair, and Devvret Rishi.
+\newblock LoRA Land: 310 fine-tuned LLMs that rival GPT-4, a technical report.
 \newblock \emph{arXiv preprint arXiv:2405.00732}, 2024.
 
 \end{thebibliography}
@@ -361,36 +387,41 @@ Justin Zhao, Timothy Wang, et~al.
 % ============== APPENDIX ==============
 \appendix
 
-\section{Raw Experimental Data}
+\section{Individual Run Data}
 \label{app:raw}
 
-\begin{verbatim}
-[
-  {"model": "distilroberta-base", "lora_rank": null,
-   "accuracy": 0.8753, "f1": 0.8763, "vram_gb": 2.02},
-  {"model": "LoRA r=4", "lora_rank": 4,
-   "accuracy": 0.8333, "f1": 0.8333, "vram_gb": 1.35},
-  {"model": "LoRA r=8", "lora_rank": 8,
-   "accuracy": 0.8393, "f1": 0.8390, "vram_gb": 1.14},
-  {"model": "LoRA r=16", "lora_rank": 16,
-   "accuracy": 0.8452, "f1": 0.8448, "vram_gb": 1.15},
-  {"model": "LoRA r=32", "lora_rank": 32,
-   "accuracy": 0.8554, "f1": 0.8550, "vram_gb": 1.15},
-  {"model": "LoRA r=64", "lora_rank": 64,
-   "accuracy": 0.8528, "f1": 0.8547, "vram_gb": 1.17}
-]
-\end{verbatim}
+\begin{table}[H]
+\centering
+\caption{All 30 Individual Run Results}
+\label{tab:individual}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Seed} & \textbf{Full FT} & \textbf{$r=4$} & \textbf{$r=8$} & \textbf{$r=16$} & \textbf{$r=32$} & \textbf{$r=64$} \\
+\midrule
+42   & 87.53\% & 83.34\% & 83.92\% & 84.55\% & 85.49\% & 85.28\% \\
+123  & 85.96\% & 81.25\% & 83.24\% & 83.18\% & 83.18\% & 83.55\% \\
+456  & 86.43\% & 81.56\% & 82.77\% & 83.55\% & 84.13\% & 84.02\% \\
+789  & 86.75\% & 82.29\% & 83.87\% & 84.44\% & 84.86\% & 84.86\% \\
+1337 & 87.59\% & 82.56\% & 83.92\% & 84.70\% & 84.44\% & 85.12\% \\
+\midrule
+\textbf{Mean} & 86.85\% & 82.20\% & 83.55\% & 84.08\% & 84.42\% & 84.56\% \\
+\textbf{Std}  & 0.70\%  & 0.83\%  & 0.55\%  & 0.61\%  & 0.89\%  & 0.76\% \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Reproducibility}
 \label{app:repro}
 
-\textbf{Code:} \texttt{lora\_experiment\_colab.ipynb}\\
-\textbf{Data:} \texttt{experiment\_results.json}\\
+\textbf{Code:} \texttt{lora\_multiseed\_experiment.ipynb}\\
+\textbf{Data:} \texttt{multiseed\_aggregated\_results.json}\\
 \textbf{Hardware:} NVIDIA GPU with CUDA support\\
-\textbf{Framework:} PyTorch, HuggingFace Transformers, PEFT
+\textbf{Framework:} PyTorch, Hugging Face Transformers, PEFT, SciPy
 
 To reproduce:
-\begin{enumerate}    \item Install dependencies: \texttt{pip install transformers datasets peft accelerate}
+\begin{enumerate}
+    \item Install dependencies: \texttt{pip install transformers datasets peft accelerate scipy}
     \item Open notebook in Jupyter or Google Colab
     \item Select GPU runtime
     \item Run all cells sequentially
@@ -400,6 +431,6 @@ To reproduce:
 \hrule
 \vspace{0.5em}
 \centering
-\textit{ValtricAI Research --- December 2025}
+\textit{ValtricAI Research, December 2025}
 
 \end{document}
