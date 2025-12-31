@@ -3,14 +3,15 @@ venv/
 __pycache__/
 *.pyc
 *.egg-info/
+.eggs/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Training outputs
-results_full_ft/
-results_lora_r*/
-logs_*/
+# Training outputs (generated during experiments)
+results/full_ft/
+results/lora_r*/
+logs/
 
 # LaTeX artifacts
 *.aux
@@ -32,5 +33,10 @@ logs_*/
 .vscode/
 .idea/
 
-# Old/archive files (kept locally but not tracked)
-archive/
+# Claude
+.claude/
+
+# Model checkpoints (too large for git)
+*.safetensors
+*.bin
+checkpoint-*/

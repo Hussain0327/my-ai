@@ -38,7 +38,8 @@
 \author{Raja Hussain$^{1,2}$\thanks{This work was conducted independently. It does not represent the views of New York University.}\\[0.5em]
 \small $^1$New York University, New York, NY, USA\\
 \small $^2$ValtricAI Research, New York, NY, USA\\
-\small \texttt{research@valtric.ai}}
+\small \texttt{research@valtricai.com}\\[0.3em]
+\small \texttt{github.com/[your-repo]}}
 
 \date{December 2025}
 
@@ -47,7 +48,13 @@
 
 % ============== ABSTRACT ==============
 \begin{abstract}
-We present a systematic investigation of Low-Rank Adaptation (LoRA) rank selection for financial sentiment analysis, validated across multiple random seeds ($n=5$ per configuration, 30 total runs). Using DistilRoBERTa-base (82M parameters) on the Twitter Financial News Sentiment dataset, we evaluate full fine-tuning and LoRA at ranks 4, 8, 16, 32, and 64. Our key finding is that \textbf{diminishing returns begin at rank 16}: while transitions from $r=4 \rightarrow 8 \rightarrow 16$ show statistically significant improvements ($p<0.01$), gains from $r=16 \rightarrow 32 \rightarrow 64$ are \textbf{not statistically significant} ($p>0.1$). Notably, the difference between $r=32$ (84.4\%) and $r=64$ (84.6\%) is indistinguishable from noise ($p=0.35$). All LoRA configurations retain 94.6--97.4\% of full fine-tuning accuracy while reducing trainable parameters by 97.8--99.2\%. These results provide evidence-based guidance for practitioners: \textbf{$r=16$ offers the best accuracy within the statistically significant improvement zone}, challenging the common practice of defaulting to higher ranks.
+
+This paper examines the impact of LoRA rank selection on financial sentiment analysis, employing multi-seed validation ($n=5$ per configuration, 30 total runs) to differentiate genuine performance variations from noise. Experiments use DistilRoBERTa-base (82M parameters) on the Twitter Financial News Sentiment dataset, comparing full fine-tuning against LoRA at ranks 4, 8, 16, 32, and 64.
+
+
+
+The central finding is that \textbf{diminishing returns begin at rank 16}. Transitions from $r=4 \rightarrow 8 \rightarrow 16$ yield statistically significant accuracy gains ($p<0.01$), but improvements beyond rank 16 are indistinguishable from random variance ($p>0.1$). The difference between $r=32$ (84.4\%) and $r=64$ (84.6\%) is not significant ($p=0.35$). All LoRA configurations retain 94.6--97.4\% of full fine-tuning accuracy while reducing trainable parameters by 97.8--99.2\%. These results suggest that $r=16$ offers the best tradeoff within the statistically significant improvement range, challenging the common practice of defaulting to higher ranks.
+
 \end{abstract}
 
 \section{Introduction}
